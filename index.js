@@ -3,7 +3,7 @@ const Pause = require('pull-pause')
 const { h, Value, Array: MutantArray, map } = require('mutant')
 
 const next = 'undefined' === typeof setImmediate ? setTimeout : setImmediate
-const buffer = Math.max(window.innerHeight * 2, 1000)
+const buffer = Math.max(window.innerHeight * 1.6, 1000)
 
 const { assertScrollable, isBottom, isTop, isFilled, isVisible } = require('./utils')
 
@@ -68,6 +68,7 @@ function Scroller(opts) {
   // var queueLengthTop = Value()
   // var queueLengthBottom = Value()
 
+  // TODO - need to check
   //apply some changes to the dom, but ensure that
   //`element` is at the same place on screen afterwards.
 
@@ -84,10 +85,34 @@ function Scroller(opts) {
     if(bottom.queue.length) {
       var m = bottom.queue.shift()
       updateBottom(m, store)
-      // queueLengthBottom.set(queue.bottom.length)
+      // queueLengthBottom.set(bottom.queue.length)
     }
   }
 
+  function addTop () {
+    if(top.queue.length) {
+      // queueLengthBottom.set(top.queue.length)
+     
+      var sh = scroller.scrollheight
+      var st = scroller.scrolltop
+
+      var m = top.queue.shift()
+      updateTop(m, store)
+      //scroll down by the height of the thing added.
+
+      //NOTE - this is no longer an appendChild, we have to wait for mutant to map the new piece into place
+      //might be a problem with detecting the need to change height
+
+      var d = (scroller.scrollHeight - sh)
+      //check whether the browser has moved the scrollTop for us.
+      //if you add an element that is not scrolled into view
+      //it no longer bumps the view down! but this check is still needed
+      //for firefox.
+      //this seems to be the behavior in recent chrome (also electron)
+      if(st === scroller.scrollTop) {
+        scroller.scrollTop = scroller.scrollTop + d }
+    }
+  }
 
   top.pause.pause()
   bottom.pause.pause()
@@ -127,65 +152,58 @@ function Scroller(opts) {
     })
   )
 
-  // var stream = pull(
-  //   pause,
-  //   pull.drain(function (e) {
-  //     queue.push(e)
-  //     obv.set(queue.length)
+  pull(
+    streamToTop,
+    top.pause,
+    pull.drain(e => {
+      top.queue.push(e)
+      // queueLengthTop.set(top.queue.length)
 
-  //     if (isVisible(content)) {
-  //       if (isEnd(scroller, buffer, isPrepend))
-  //         add()
-  //     }
-  //     else {
-  //       if(scroller.scrollHeight < window.innerHeight && content.children.length < 10) {
-  //         add()
-  //       }
-  //     }
+      if (isVisible(content)) {
+        if (isTop(scroller, buffer))
+          addTop()
+      }
+      else {
+        if(scroller.scrollHeight < window.innerHeight && content.children.length < 10) {
+          addTop()
+        }
+      }
 
-  //     if(queue.length > 5)
-  //       pause.pause()
+      if(top.queue.length > 5)
+        top.pause.pause()
 
-  //   }, function (err) {
-  //     if(err) console.error(err)
-  //     cb ? cb(err) : console.error(err)
-  //   })
-  // )
+    }, (err) => {
+      if(err) console.error(err)
+      cb ? cb(err) : console.error(err)
+    })
+  )
 
-  // stream.visible = add
-  // stream.observ = obv
   return scroller
 }
 
 
 function append(scroller, list, el, isPrepend, isSticky) {
   if(!el) return
-  var s = scroller.scrollHeight
-  var st = scroller.scrollTop
+  var s = scroller.scrollheight
+  var st = scroller.scrolltop
   if(isPrepend && list.firstChild)
     list.insertBefore(el, list.firstChild)
   else
     list.appendChild(el)
 
+  var s = scroller.scrollheight
+  var st = scroller.scrolltop
+  //add
   //scroll down by the height of the thing added.
-  //if it added to the top (in non-sticky mode)
-  //or added it to the bottom (in sticky mode)
-  if(isPrepend !== isSticky) {
-    var d = (scroller.scrollHeight - s)
-    var before = scroller.scrollTop
-    //check whether the browser has moved the scrollTop for us.
-    //if you add an element that is not scrolled into view
-    //it no longer bumps the view down! but this check is still needed
-    //for firefox.
-    //this seems to be the behavior in recent chrome (also electron)
-    if(st === scroller.scrollTop) {
-      scroller.scrollTop = scroller.scrollTop + d
-    }
+
+  var d = (scroller.scrollHeight - s)
+  //check whether the browser has moved the scrollTop for us.
+  //if you add an element that is not scrolled into view
+  //it no longer bumps the view down! but this check is still needed
+  //for firefox.
+  //this seems to be the behavior in recent chrome (also electron)
+  if(st === scroller.scrollTop) {
+    scroller.scrollTop = scroller.scrollTop + d
   }
 }
-
-
-
-
-
 
