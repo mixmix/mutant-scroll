@@ -20,21 +20,21 @@ function Scroller(opts) {
     render,
     updateTop =  updateTopDefault,
     updateBottom = updateBottomDefault,
+    store = MutantArray(),
     cb = (err) => { if (err) throw err }
   } = opts
 
-  function updateTopDefault (newItem, soFar) {
+  function updateTopDefault (soFar, newItem) {
     soFar.insert(newItem, 0) 
   }
 
-  function updateBottomDefault (newItem, soFar) {
+  function updateBottomDefault (soFar, newItem) {
     soFar.push(newItem) 
   }
 
   if (!streamToTop && !streamToBottom) throw new Error('Scroller requires a at least one stream: streamToTop || streamToBottom')
   if (!render) throw new Error('Scroller expects a render')
 
-  const store = MutantArray()
   const content = h('section.content', map(store, render, { comparer: (a, b) => a === b }))
   const scroller = h('Scroller', { classList, style: { overflow: 'auto' } }, [
     h('div.wrapper', [
@@ -84,7 +84,7 @@ function Scroller(opts) {
   function addBottom () {
     if(bottom.queue.length) {
       var m = bottom.queue.shift()
-      updateBottom(m, store)
+      updateBottom(store, m)
       // queueLengthBottom.set(bottom.queue.length)
     }
   }
@@ -97,7 +97,7 @@ function Scroller(opts) {
       var st = scroller.scrolltop
 
       var m = top.queue.shift()
-      updateTop(m, store)
+      updateTop(store, m)
       //scroll down by the height of the thing added.
 
       //NOTE - this is no longer an appendChild, we have to wait for mutant to map the new piece into place
