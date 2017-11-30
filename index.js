@@ -36,12 +36,10 @@ function Scroller(opts) {
   if (!render) throw new Error('Scroller expects a render')
 
   const content = h('section.content', map(store, render, { comparer: (a, b) => a === b }))
-  const scroller = h('Scroller', { classList, style: { overflow: 'auto' } }, [
-    h('div.wrapper', [
-      h('section.top', prepend),
-      content,
-      h('section.bottom', append)
-    ])
+  const scroller = h('Scroller', { classList, style: { 'overflow-y': 'auto' } }, [
+    h('section.top', prepend),
+    content,
+    h('section.bottom', append)
   ])
   assertScrollable(scroller)
 
