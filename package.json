@@ -1,6 +1,6 @@
 {
   "name": "mutant-scroll",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "An infinite scroller fed by pull-streams",
   "main": "index.js",
   "scripts": {
