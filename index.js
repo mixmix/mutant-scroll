@@ -46,10 +46,12 @@ function Scroller(opts) {
   scroller.addEventListener('scroll', (ev) => {
     // this assumes the past is down and will be easier to reach isFilled == true by using streamToBottom
     if (isBottom(scroller, buffer) || !isFilled(content)) {
+      addBottom()
       bottom.pause.resume()
     }
 
     if (isTop(scroller, buffer)) {
+      addTop()
       top.pause.resume()
     }
   })
