@@ -1,39 +1,30 @@
 const pull = require('pull-stream')
-const Pause = require('pull-pause')
+pull.pause = require('pull-pause')
 const { h, Array: MutantArray, map } = require('mutant')
 
 const next = typeof setImmediate === 'undefined' ? setTimeout : setImmediate
-const buffer = Math.max(window.innerHeight * 1.6, 1000)
 
 const { assertScrollable, isBottom, isTop, isFilled, isVisible } = require('./utils')
 
-module.exports = Scroller
+const HEIGHT_BUFFER = Math.max(window.innerHeight * 1.6, 1000)
+const QUEUE_SIZE = 10
 
-function Scroller (opts) {
+module.exports = function Scroller (opts) {
   const {
     classList = [],
     prepend = [],
     append = [],
-    streamToTop,
-    streamToBottom,
+    streamToTop = pull.empty(),
+    streamToBottom = pull.empty(),
     render,
-    updateTop = updateTopDefault,
-    updateBottom = updateBottomDefault,
+    updateTop = (soFar, newItem) => { soFar.insert(newItem, 0) },
+    updateBottom = (soFar, newItem) => { soFar.push(newItem) },
     store = MutantArray(),
     cb = (err) => { if (err) throw err },
     overflowY = 'scroll'
   } = opts
 
-  function updateTopDefault (soFar, newItem) {
-    soFar.insert(newItem, 0)
-  }
-
-  function updateBottomDefault (soFar, newItem) {
-    soFar.push(newItem)
-  }
-
-  if (!streamToTop && !streamToBottom) throw new Error('Scroller requires a at least one stream: streamToTop || streamToBottom')
-  if (!render) throw new Error('Scroller expects a render')
+  if (!render) throw new Error('Scroller requires a render function')
 
   const content = h('section.content', map(store, render, { comparer: (a, b) => a === b }))
   const scroller = h('Scroller', { classList, style: { 'overflow-y': overflowY } }, [
@@ -43,57 +34,43 @@ function Scroller (opts) {
   ])
   assertScrollable(scroller)
 
-  scroller.addEventListener('scroll', (ev) => {
+  scroller.addEventListener('scroll', () => {
     // this assumes the past is down and will be easier to reach isFilled == true by using streamToBottom
-    if (isBottom(scroller, buffer) || !isFilled(content)) {
+    if (isBottom(scroller, HEIGHT_BUFFER) || !isFilled(scroller)) {
       addBottom()
-      bottom.pause.resume()
     }
 
-    if (isTop(scroller, buffer)) {
+    if (isTop(scroller, HEIGHT_BUFFER)) {
       addTop()
-      top.pause.resume()
     }
   })
 
   var top = {
     queue: [],
-    pause: Pause(function () {})
+    stream: pull.pause(function () {})
   }
+  top.stream.pause()
+
   var bottom = {
     queue: [],
-    pause: Pause(function () {})
+    stream: pull.pause(function () {})
   }
+  bottom.stream.pause()
 
-  // var queueLengthTop = Value()
-  // var queueLengthBottom = Value()
-
-  // TODO - need to check
-  // apply some changes to the dom, but ensure that
-  // `element` is at the same place on screen afterwards.
-
-  // function add () {
-  //   if(queue.length) {
-  //     var m = queue.shift()
-  //     var r = render(m)
-  //     append(scroller, content, r, isPrepend, isSticky)
-  //     obv.set(queue.length)
-  //   }
-  // }
-  //
   function addBottom () {
     if (bottom.queue.length) {
       var m = bottom.queue.shift()
       updateBottom(store, m)
-      // queueLengthBottom.set(bottom.queue.length)
+    }
+
+    if (bottom.queue.length < QUEUE_SIZE) {
+      bottom.stream.resume()
     }
   }
 
   function addTop () {
     if (top.queue.length) {
-      // queueLengthBottom.set(top.queue.length)
-
-      var sh = scroller.scrollheight
+      var sh = scroller.scrollHeight
       var st = scroller.scrolltop
 
       var m = top.queue.shift()
@@ -113,62 +90,57 @@ function Scroller (opts) {
         scroller.scrollTop = scroller.scrollTop + d
       }
     }
+
+    if (top.queue.length < QUEUE_SIZE) {
+      top.stream.resume()
+    }
   }
-
-  top.pause.pause()
-  bottom.pause.pause()
-
-  // wait until the scroller has been added to the document
-  next(function next () {
-    if (scroller.parentElement) {
-      top.pause.resume()
-      bottom.pause.resume()
-    } else setTimeout(next, 100)
-  })
 
   pull(
     streamToBottom,
-    bottom.pause,
+    bottom.stream,
     pull.drain(e => {
       bottom.queue.push(e)
-      // queueLengthBottom.set(bottom.queue.length)
 
-      if (isVisible(content)) {
-        if (isBottom(scroller, buffer)) { addBottom() }
-      } else {
-        if (scroller.scrollHeight < window.innerHeight && content.children.length < 10) {
-          addBottom()
-        }
-      }
-
-      if (bottom.queue.length > 5) { bottom.pause.pause() }
-    }, (err) => {
+      if (bottom.queue.length >= QUEUE_SIZE) bottom.stream.pause()
+    }),
+    (err) => {
       if (err) console.error(err)
       cb ? cb(err) : console.error(err)
-    })
+    }
   )
 
   pull(
     streamToTop,
-    top.pause,
+    top.stream,
     pull.drain(e => {
       top.queue.push(e)
-      // queueLengthTop.set(top.queue.length)
 
-      if (isVisible(content)) {
-        if (isTop(scroller, buffer)) { addTop() }
-      } else {
-        if (scroller.scrollHeight < window.innerHeight && content.children.length < 10) {
-          addTop()
-        }
-      }
-
-      if (top.queue.length > 5) { top.pause.pause() }
+      if (top.queue.length >= QUEUE_SIZE) top.stream.pause()
     }, (err) => {
       if (err) console.error(err)
       cb ? cb(err) : console.error(err)
     })
   )
+
+  // wait until the scroller has been added to the document
+  next(function start () {
+    if (!scroller.parentElement) return setTimeout(start, 100)
+
+    fillPage()
+  })
+
+  function fillPage () {
+    if (!isVisible(content)) return setTimeout(fillPage, 100)
+
+    addBottom()
+    addTop()
+
+    if (!isFilled(scroller)) {
+      if (bottom.queue.length || top.queue.length) setTimeout(fillPage, 100)
+      else setTimeout(fillPage, 1000)
+    }
+  }
 
   return scroller
 }
