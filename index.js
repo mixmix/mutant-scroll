@@ -1,6 +1,7 @@
 const pull = require('pull-stream')
 pull.pause = require('pull-pause')
 const { h, Array: MutantArray, map } = require('mutant')
+const throttle = require('lodash.throttle')
 
 const next = typeof setImmediate === 'undefined' ? setTimeout : setImmediate
 
@@ -17,6 +18,7 @@ module.exports = function Scroller (opts) {
     streamToTop = pull.empty(),
     streamToBottom = pull.empty(),
     render,
+    comparer = (a, b) => a === b,
     updateTop = (soFar, newItem) => { soFar.insert(newItem, 0) },
     updateBottom = (soFar, newItem) => { soFar.push(newItem) },
     store = MutantArray(),
@@ -26,7 +28,7 @@ module.exports = function Scroller (opts) {
 
   if (!render) throw new Error('Scroller requires a render function')
 
-  const content = h('section.content', map(store, render, { comparer: (a, b) => a === b }))
+  const content = h('section.content', map(store, render, { comparer }))
   const scroller = h('Scroller', { classList, style: { 'overflow-y': overflowY } }, [
     h('section.top', prepend),
     content,
@@ -34,28 +36,35 @@ module.exports = function Scroller (opts) {
   ])
   assertScrollable(scroller)
 
-  scroller.addEventListener('scroll', () => {
-    // this assumes the past is down and will be easier to reach isFilled == true by using streamToBottom
-    if (isBottom(scroller, HEIGHT_BUFFER) || !isFilled(scroller)) {
-      addBottom()
+  scroller.addEventListener('scroll', throttle(onScroll, 1000))
+  function onScroll () {
+    moreBottom()
+    moreTop()
+
+    function moreBottom () {
+      if (isBottom(scroller, HEIGHT_BUFFER)) {
+        addBottom()
+        setTimeout(moreBottom, 200)
+      }
     }
 
-    if (isTop(scroller, HEIGHT_BUFFER)) {
-      addTop()
+    function moreTop () {
+      if (isTop(scroller, HEIGHT_BUFFER)) {
+        addTop()
+        setTimeout(moreTop, 200)
+      }
     }
-  })
+  }
 
   var top = {
     queue: [],
     stream: pull.pause(function () {})
   }
-  top.stream.pause()
 
   var bottom = {
     queue: [],
     stream: pull.pause(function () {})
   }
-  bottom.stream.pause()
 
   function addBottom () {
     if (bottom.queue.length) {

@@ -22,6 +22,7 @@
   },
   "homepage": "https://github.com/mixmix/mutant-scroll#readme",
   "dependencies": {
+    "lodash.throttle": "^4.1.1",
     "mutant": "^3.22.1",
     "pull-pause": "0.0.1",
     "pull-stream": "^3.6.1"
