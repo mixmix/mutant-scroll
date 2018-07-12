@@ -42,6 +42,8 @@ module.exports = function Scroller (opts) {
     moreTop()
 
     function moreBottom () {
+      if (!isVisible(content)) return setTimeout(moreBottom, 1000)
+
       if (isBottom(scroller, HEIGHT_BUFFER)) {
         addBottom()
         setTimeout(moreBottom, 200)
@@ -49,6 +51,8 @@ module.exports = function Scroller (opts) {
     }
 
     function moreTop () {
+      if (!isVisible(content)) return setTimeout(moreTop, 1000)
+
       if (isTop(scroller, HEIGHT_BUFFER)) {
         addTop()
         setTimeout(moreTop, 200)
